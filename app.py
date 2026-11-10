@@ -42,21 +42,32 @@ def root():
             "/activity/training", "/mental", "/radiation", "/engine"]}
 
 # ---------------- Heart ----------------
+def _arr(lst, b64, name, required=True):
+    """Сигнал списком чисел или компактно: float32 little-endian в base64 (в разы быстрее для длинных записей)."""
+    if b64: return np.frombuffer(base64.b64decode(b64), dtype="<f4").astype(float)
+    if lst is None:
+        if required: raise HTTPException(400, f"нет данных {name}")
+        return None
+    return np.asarray(lst, float)
+
 class HeartIn(BaseModel):
-    ecg: List[float] = Field(..., description="ЭКГ, 1-е отведение (мВ). Не меньше ~5 минут: первые 300 сокращений — личная калибровка")
+    ecg: Optional[List[float]] = Field(None, description="ЭКГ, 1-е отведение (мВ). Не меньше ~5 минут: первые 300 сокращений — личная калибровка")
+    ecg_b64: Optional[str] = Field(None, description="То же компактно: float32 little-endian, base64 (рекомендуется — быстрее)")
+    ecg_lead2_b64: Optional[str] = Field(None, description="2-е отведение компактно (необязательно)")
     fs: float = Field(360, description="Частота дискретизации, Гц")
     ecg_lead2: Optional[List[float]] = Field(None, description="2-е отведение (необязательно) — для оценки качества v2")
     return_beats: bool = Field(False, description="Вернуть тип каждого сокращения")
 
 @app.post("/heart")
 def heart(inp: HeartIn):
-    sig, fs = F.to_360(inp.ecg, inp.fs)
+    sig, fs = F.to_360(_arr(inp.ecg, inp.ecg_b64, "ecg"), inp.fs)
+    lead2 = _arr(inp.ecg_lead2, inp.ecg_lead2_b64, "ecg_lead2", required=False)
     if len(sig) < 60 * fs: raise HTTPException(400, "нужно хотя бы 60 с ЭКГ (лучше ≥ 5 мин)")
     beats = F.detect_beats(sig, fs)
     if len(beats) < 30: raise HTTPException(422, "слишком мало сокращений найдено — проверьте сигнал")
     rr = np.diff(beats) / fs; q = F.ecg_quality(sig, fs, beats); good = np.mean([x[2] for x in q]) if q else 0.0
-    if inp.ecg_lead2 is not None and M.get("heart_ecg_quality") is not None:
-        s2, _ = F.to_360(inp.ecg_lead2, inp.fs); n = min(len(sig), len(s2)); d1 = F.detect_beats(s2[:n], fs)
+    if lead2 is not None and M.get("heart_ecg_quality") is not None:
+        s2, _ = F.to_360(lead2, inp.fs); n = min(len(sig), len(s2)); d1 = F.detect_beats(s2[:n], fs)
         Fq = [F.sqi_feats(sig[:n], s2[:n], fs, beats, d1, a, b) for a, b, _ in q if b <= n]
         good = float(np.mean(M["heart_ecg_quality"].predict_proba(np.array(Fq))[:, 1] < 0.5)) if Fq else good
     X, _ = F.beat_features(sig, beats, ["N"] * len(beats), fs)
@@ -65,6 +76,7 @@ def heart(inp: HeartIn):
     P = _proba(M["heart"], X); lab = P.columns[P.values.argmax(1)]
     bt = beats[10:10 + len(lab)]; isn = np.asarray(lab) == "N"            # RR только между двумя нормальными (N–N), как в стандарте HRV
     nn = (np.diff(bt) / fs)[isn[:-1] & isn[1:]] if len(bt) > 2 else rr; nn = nn[(nn > 0.3) & (nn < 2.0)]
+    if len(nn) < 3: nn = rr[(rr > 0.3) & (rr < 2.0)]                       # почти нет нормальных подряд — берём все интервалы
     out = dict(beats=int(len(beats)), heart_rate_bpm=round(60 / float(np.median(nn)), 1), rmssd_ms=round(float(np.sqrt(np.mean(np.diff(nn * 1000) ** 2))), 1),
                ectopic_pct=round(100 * float(np.mean(lab != "N")), 2),
                beat_types={k: int(v) for k, v in pd.Series(lab).value_counts().items()},

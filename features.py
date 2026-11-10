@@ -386,7 +386,7 @@ def imu_windows_training(wrist_acc, wrist_gyro, chest_acc, chest_gyro, hr, fs=10
 def radiation_analyze(t, rate, lat, lon, L, baseline_days=7.0, zthr=6.0, persist=2, mission_days=180):
     """Мощность поглощённой дозы (мкГр/ч) по орбите. Норма для каждого места орбиты (L, широта, долгота) — по первым
     baseline_days суток; тревога — превышение в высоких широтах (L > 3) z > zthr два 3-часовых окна подряд."""
-    d = pd.DataFrame(dict(t=pd.to_datetime(t, utc=True), rate=rate, latitude=lat, longitude=lon, l=L)).dropna().sort_values("t")
+    d = pd.DataFrame(dict(t=pd.to_datetime(pd.Series(t), utc=True, infer_datetime_format=True), rate=rate, latitude=lat, longitude=lon, l=L)).dropna().sort_values("t")
     dt = d.t.diff().dt.total_seconds().fillna(0).clip(upper=3600).values / 3600
     cum_mGy = float(np.sum(0.5 * (d.rate.values[1:] + d.rate.values[:-1]) * dt[1:]) / 1000)
     days = max((d.t.iloc[-1] - d.t.iloc[0]).total_seconds() / 86400, 1e-6)
