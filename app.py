@@ -1,6 +1,8 @@
 """HealthGuard AI — API. Не ставит диагнозов: только замечает отклонения от личной нормы и уведомляет.
 Документация с примерами: /docs"""
-import os, base64, numpy as np, pandas as pd, joblib
+import os
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"): os.environ.setdefault(_v, "1")
+import base64, numpy as np, pandas as pd, joblib
 from typing import List, Optional, Dict
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -14,7 +16,10 @@ class _Models(dict):
     def __missing__(self, k):
         p = os.path.join(self.DIR, k + ".joblib")
         if not os.path.exists(p): raise KeyError(k)
-        self[k] = joblib.load(p); return self[k]
+        m = joblib.load(p)
+        for est in [m] + [st for _, st in getattr(m, "steps", [])]:   # на 0.1 ядра параллельность только мешает
+            if hasattr(est, "n_jobs"): est.n_jobs = 1
+        self[k] = m; return m
     def get(self, k, default=None):
         if k in self.settings: return self.settings[k]
         try: return self[k]
