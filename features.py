@@ -220,27 +220,56 @@ MENTAL_FEATS = (["chest_" + n for n in ["HR", "SDNN", "RMSSD", "pNN50", "EDA_mea
                                        "Temp_mean", "Temp_slope", "ACC_std", "ACC_range"]])
 
 # ---------------- Unified Engine ----------------
-SIGNALS = {  # сигнал: (модуль, вредное направление, мин. SD, единица, название)
-    "resting_hr":  ("Heart", +1, 2.0, "уд/мин", "пульс в покое"),
-    "rmssd":       ("Heart", -1, 4.0, "мс", "вариабельность ритма (RMSSD)"),
-    "ectopic_pct": ("Heart", +1, 0.3, "%", "доля внеочередных сокращений"),
-    "sleep_h":     ("Sleep", -1, 0.4, "ч", "длительность сна"),
-    "sleep_eff":   ("Sleep", -1, 2.5, "%", "эффективность сна"),
-    "active_min":  ("Activity", -1, 8.0, "мин", "активное время / тренировки"),
-    "rad_mSv":     ("Radiation", +1, 0.03, "м(Зв|Гр)/сут", "суточная доза"),
-    "stress_frac": ("Mental", +1, 0.05, "", "доля времени с признаками стресса"),
-    "pvt_rt":      ("Mental", +1, 12.0, "мс", "время реакции (PVT)"),
+SIGNALS = {  # signal: (module, harmful direction, min SD, unit, title)
+    "resting_hr":  ("Heart", +1, 2.0, "bpm", "resting heart rate"),
+    "rmssd":       ("Heart", -1, 4.0, "ms", "heart rate variability (RMSSD)"),
+    "ectopic_pct": ("Heart", +1, 0.3, "%", "share of ectopic beats"),
+    "sleep_h":     ("Sleep", -1, 0.4, "h", "sleep duration"),
+    "sleep_eff":   ("Sleep", -1, 2.5, "%", "sleep efficiency"),
+    "active_min":  ("Activity", -1, 8.0, "min", "active time / exercise"),
+    "rad_mSv":     ("Radiation", +1, 0.03, "mGy/day", "daily dose"),
+    "stress_frac": ("Mental", +1, 0.05, "", "time with signs of stress"),
+    "pvt_rt":      ("Mental", +1, 12.0, "ms", "reaction time (PVT)"),
 }
 
 LEVELS = ["Normal", "Attention", "Warning", "Critical"]
 
-ADVICE = {
-    "Heart": "Отдохните 15 минут и повторите измерение; если изменение сохранится — данные будут переданы бортовому врачу.",
-    "Sleep": "Постарайтесь сегодня лечь вовремя; команда может пересмотреть расписание сна.",
-    "Activity": "Вы выполняете меньше тренировок, чем обычно — проверьте план упражнений на сегодня.",
-    "Radiation": "Следуйте процедуре миссии при повышенной радиации; центр управления уведомлён.",
-    "Mental": "Сделайте перерыв; при желании поговорите с психологической поддержкой миссии.",
+TEXT = {
+    "en": dict(
+        titles={k: v[4] for k, v in SIGNALS.items()},
+        units={k: v[3] for k, v in SIGNALS.items()},
+        advice={
+            "Heart": "Rest for 15 minutes and repeat the measurement; if the change persists, the data will be sent to the flight surgeon.",
+            "Sleep": "Try to go to bed on time tonight; the team may adjust the sleep schedule.",
+            "Activity": "You are exercising less than usual; check today's exercise plan.",
+            "Radiation": "Follow the mission procedure for elevated radiation; mission control has been notified.",
+            "Mental": "Take a break; you can talk to the mission's psychological support if you wish.",
+        },
+        header="[{level}] Day {day}. This is not a diagnosis. The system noticed changes relative to your personal baseline:",
+        finding="  • {signal}: {value} {unit} (your baseline {baseline}, {change:+.0f}%) — {module} AI",
+        medical="  → The medical team has been notified for review.",
+        footer="  (data quality: {q:.0%}; reason: {reason})",
+        rad_event="radiation event", hard_rule="mission hard rule", modules_out="{n} module(s) outside personal baseline"),
+    "ru": dict(
+        titles={"resting_hr": "пульс в покое", "rmssd": "вариабельность ритма (RMSSD)", "ectopic_pct": "доля внеочередных сокращений",
+                "sleep_h": "длительность сна", "sleep_eff": "эффективность сна", "active_min": "активное время / тренировки",
+                "rad_mSv": "суточная доза", "stress_frac": "доля времени с признаками стресса", "pvt_rt": "время реакции (PVT)"},
+        units={"resting_hr": "уд/мин", "rmssd": "мс", "ectopic_pct": "%", "sleep_h": "ч", "sleep_eff": "%", "active_min": "мин",
+               "rad_mSv": "мГр/сут", "stress_frac": "", "pvt_rt": "мс"},
+        advice={
+            "Heart": "Отдохните 15 минут и повторите измерение; если изменение сохранится — данные будут переданы бортовому врачу.",
+            "Sleep": "Постарайтесь сегодня лечь вовремя; команда может пересмотреть расписание сна.",
+            "Activity": "Вы выполняете меньше тренировок, чем обычно — проверьте план упражнений на сегодня.",
+            "Radiation": "Следуйте процедуре миссии при повышенной радиации; центр управления уведомлён.",
+            "Mental": "Сделайте перерыв; при желании поговорите с психологической поддержкой миссии.",
+        },
+        header="[{level}] День {day}. Это не диагноз — система заметила изменения относительно вашей нормы:",
+        finding="  • {signal}: {value} {unit} (ваша норма {baseline}, {change:+.0f}%) — {module} AI",
+        medical="  → Медицинская команда получила уведомление для проверки.",
+        footer="  (качество данных: {q:.0%}; причина уровня: {reason})",
+        rad_event="радиационное событие", hard_rule="жёсткое правило миссии", modules_out="модулей вне личной нормы: {n}"),
 }
+ADVICE = TEXT["en"]["advice"]
 
 class UnifiedHealthEngine:
     def __init__(self, baseline_days=14, smooth=0.5, hard_rules=None):
@@ -277,29 +306,29 @@ class UnifiedHealthEngine:
         hard |= df.index.isin(list(rad_events_days)); overall[hard] = 3
         self.z, self.sig_lvl, self.mod_lvl, self.overall, self.hard_flags = z, sig_lvl, mod_lvl, overall, hard
         return overall
-    def explain(self, df, day):
-        lvl = int(self.overall.loc[day]); msgs = []
+    def explain(self, df, day, lang="en"):
+        T = TEXT.get(lang, TEXT["en"]); lvl = int(self.overall.loc[day]); msgs = []
         quality = 1 - df.loc[day, list(self.base)].isna().mean()
         for s in self.base:
             if self.sig_lvl.loc[day, s] >= 1 or (s in self.hard and df.loc[day, s] >= self.hard[s]):
-                mod, _, _, unit, title = SIGNALS[s]; m, _ = self.base[s]; v = df.loc[day, s]
-                pct = 100*(v - m)/abs(m) if m else np.nan
-                msgs.append(dict(module=mod, signal=title, value=round(float(v), 2), baseline=round(float(m), 2),
-                                 unit=unit, change_pct=round(float(pct), 1), z=round(float(self.z.loc[day, s]), 1)))
-        if day in getattr(self, "_rad_days", ()): msgs.append(dict(module="Radiation", signal="радиационное событие"))
+                mod = SIGNALS[s][0]; m, _ = self.base[s]; v = df.loc[day, s]
+                pct = 100*(v - m)/abs(m) if m else 0.0
+                msgs.append(dict(module=mod, signal_id=s, signal=T["titles"][s], value=round(float(v), 2), baseline=round(float(m), 2),
+                                 unit=T["units"][s], change_pct=round(float(pct), 1), z=round(float(self.z.loc[day, s]), 1)))
+        if day in getattr(self, "_rad_days", ()): msgs.append(dict(module="Radiation", signal_id="radiation_event", signal=T["rad_event"]))
         return dict(day=int(day), level=LEVELS[lvl], data_quality=round(float(quality), 2), findings=msgs,
-                    reason=("жёсткое правило миссии" if self.hard_flags.loc[day] else
-                            f"{(self.mod_lvl.loc[day] >= 1).sum()} модул(я/ей) вне личной нормы"))
-    def notify(self, df, day):
-        e = self.explain(df, day)
+                    reason=(T["hard_rule"] if self.hard_flags.loc[day] else T["modules_out"].format(n=int((self.mod_lvl.loc[day] >= 1).sum()))))
+    def notify(self, df, day, lang="en"):
+        T = TEXT.get(lang, TEXT["en"]); e = self.explain(df, day, lang)
         if e["level"] == "Normal": return None
-        lines = [f"[{e['level']}] День {e['day']}. Это не диагноз — система заметила изменения относительно вашей нормы:"]
+        lines = [T["header"].format(level=e["level"], day=e["day"])]
         for f in e["findings"]:
             if "value" in f:
-                lines.append(f"  • {f['signal']}: {f['value']} {f['unit']} (ваша норма {f['baseline']}, {f['change_pct']:+.0f}%) — {f['module']} AI")
-        for mod in sorted({f["module"] for f in e["findings"]}): lines.append("  → " + ADVICE[mod])
-        if e["level"] in ("Warning", "Critical"): lines.append("  → Медицинская команда получила уведомление для проверки.")
-        lines.append(f"  (качество данных: {e['data_quality']:.0%}; причина уровня: {e['reason']})")
+                lines.append(T["finding"].format(signal=f["signal"], value=f["value"], unit=f["unit"], baseline=f["baseline"],
+                                                 change=f["change_pct"], module=f["module"]))
+        for mod in sorted({f["module"] for f in e["findings"]}): lines.append("  → " + T["advice"][mod])
+        if e["level"] in ("Warning", "Critical"): lines.append(T["medical"])
+        lines.append(T["footer"].format(q=e["data_quality"], reason=e["reason"]))
         return "\n".join(lines)
 
 
